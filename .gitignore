@@ -1,0 +1,14 @@
+# Virtual Environments
+.venv/
+venv/
+ENV/
+
+# Python cache & artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Sensitive session data and generated payloads
+config.json
+data_template.json
+data.json
