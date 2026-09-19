@@ -24,5 +24,5 @@ if exist "requirements.txt" (
 )
 
 :: 3. Execute script
-"%VENV_DIR%\Scripts\python.exe" universal_bulk.py
+"%VENV_DIR%\Scripts\python.exe" main.py
 pause

@@ -22,4 +22,4 @@ elif [ -f "requirement.txt" ]; then
     "$VENV_DIR/bin/pip" install -q -r requirement.txt
 fi
 
-"$VENV_DIR/bin/python" universal_bulk.py
+"$VENV_DIR/bin/python" main.py

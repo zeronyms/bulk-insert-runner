@@ -12,3 +12,7 @@ __pycache__/
 config.json
 data_template.json
 data.json
+data_template.xlsx
+data.xlsx
+data_template.csv
+data.csv
