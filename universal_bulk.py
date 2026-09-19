@@ -3,6 +3,7 @@ import os
 import re
 import shlex
 import time
+
 import requests
 
 CONFIG_FILE = "config.json"
@@ -27,7 +28,7 @@ def ask_multiline(prompt_text):
 def parse_curl(curl_cmd):
     try:
         tokens = shlex.split(curl_cmd)
-    except Exception:
+    except ValueError:
         # Fallback if character escaping is malformed
         tokens = curl_cmd.split()
 
@@ -76,11 +77,14 @@ def parse_curl(curl_cmd):
     if data_raw:
         try:
             sample_payload = json.loads(data_raw)
-        except Exception:
+        except json.JSONDecodeError:
             # Find JSON string via regex if parsing fails
             match = re.search(r"(\{.*\}|\[.*\])", data_raw, re.DOTALL)
             if match:
-                sample_payload = json.loads(match.group(1))
+                try:
+                    sample_payload = json.loads(match.group(1))
+                except json.JSONDecodeError:
+                    pass
 
     return {
         "url": url,
@@ -128,7 +132,7 @@ def menu_generate_template():
             f"Open '{TEMPLATE_FILE}', duplicate the objects inside with your desired data, then run Menu 2."
         )
 
-    except Exception as e:
+    except (ValueError, OSError) as e:
         print(f"\n[Error]: {e}")
 
 
@@ -143,17 +147,21 @@ def menu_execute_bulk():
         print(f"\n[Error] File '{TEMPLATE_FILE}' not found.")
         return
 
-    with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-        config = json.load(f)
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            config = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"\n[Error] Failed to read '{CONFIG_FILE}': {e}")
+        return
 
-    with open(TEMPLATE_FILE, "r", encoding="utf-8") as f:
-        try:
+    try:
+        with open(TEMPLATE_FILE, "r", encoding="utf-8") as f:
             items = json.load(f)
             if not isinstance(items, list):
-                raise ValueError("JSON file format must be an array []")
-        except Exception as e:
-            print(f"\n[Error] Invalid '{TEMPLATE_FILE}': {e}")
-            return
+                raise TypeError("JSON file format must be an array []")
+    except (json.JSONDecodeError, TypeError, OSError) as e:
+        print(f"\n[Error] Invalid '{TEMPLATE_FILE}': {e}")
+        return
 
     print("\n==============================================")
     print(f"Target URL : {config['url']}")
@@ -218,7 +226,7 @@ def menu_execute_bulk():
                     )
                     break
 
-        except Exception as err:
+        except requests.RequestException as err:
             print(f"   Network Error: {err}")
             fail_count += 1
 
@@ -256,7 +264,7 @@ def menu_clear_workspace():
         try:
             os.remove(f)
             print(f"Deleted: {f}")
-        except Exception as e:
+        except OSError as e:
             print(f"Failed to delete {f}: {e}")
 
     print("\n[Success] Workspace cleared! You can now configure a new API using Menu 1.")
