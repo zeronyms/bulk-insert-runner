@@ -19,6 +19,42 @@ def get_item_label(item: dict[str, Any], index: int) -> str:
     )
 
 
+def build_execution_tasks(
+    url: str,
+    headers: dict[str, str],
+    items: list[dict[str, Any]],
+    group_by: str | None = None,
+    array_key: str | None = None,
+) -> list[tuple[str, dict[str, str], dict[str, Any], str]]:
+    """Build prepared HTTP request tasks (url, headers, payload, label) for execution.
+
+    Supports both single-row standard requests and array-grouped batch requests.
+    """
+    if array_key:
+        grouped = group_items_for_request(items, group_by, array_key)
+        tasks: list[tuple[str, dict[str, str], dict[str, Any], str]] = []
+        for ctx, payload in grouped:
+            req_url = format_template_str(url, ctx)
+            req_headers = {k: format_template_str(v, ctx) for k, v in headers.items()}
+            count = len(payload.get(array_key, []))
+            if group_by and group_by in ctx:
+                label = f"{group_by}={ctx[group_by]} ({count} items)"
+            else:
+                label = f"Batch ({count} items)"
+            tasks.append((req_url, req_headers, payload, label))
+        return tasks
+
+    tasks = []
+    for idx, item in enumerate(items, start=1):
+        req_url = format_template_str(url, item) if "{" in url else url
+        req_headers = {
+            k: format_template_str(v, item) if "{" in v else v for k, v in headers.items()
+        }
+        label = get_item_label(item, idx)
+        tasks.append((req_url, req_headers, item, label))
+    return tasks
+
+
 def execute_bulk_requests(
     url: str,
     method: str,
@@ -40,27 +76,13 @@ def execute_bulk_requests(
     Returns:
         tuple[int, int]: (success_count, fail_count)
     """
-    if array_key:
-        grouped = group_items_for_request(items, group_by, array_key)
-        tasks: list[tuple[str, dict[str, str], dict[str, Any], str]] = []
-        for ctx, payload in grouped:
-            req_url = format_template_str(url, ctx)
-            req_headers = {k: format_template_str(v, ctx) for k, v in headers.items()}
-            count = len(payload.get(array_key, []))
-            if group_by and group_by in ctx:
-                label = f"{group_by}={ctx[group_by]} ({count} item{'s' if count > 1 else ''})"
-            else:
-                label = f"Batch ({count} item{'s' if count > 1 else ''})"
-            tasks.append((req_url, req_headers, payload, label))
-    else:
-        tasks = []
-        for idx, item in enumerate(items, start=1):
-            req_url = format_template_str(url, item) if "{" in url else url
-            req_headers = {
-                k: format_template_str(v, item) if "{" in v else v for k, v in headers.items()
-            }
-            label = get_item_label(item, idx)
-            tasks.append((req_url, req_headers, item, label))
+    tasks = build_execution_tasks(
+        url=url,
+        headers=headers,
+        items=items,
+        group_by=group_by,
+        array_key=array_key,
+    )
 
     success_count = 0
     fail_count = 0

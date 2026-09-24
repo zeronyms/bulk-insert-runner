@@ -21,7 +21,7 @@ from core.data_handler import (
     group_items_for_request,
     load_data_file,
 )
-from core.runner import execute_bulk_requests
+from core.runner import build_execution_tasks, execute_bulk_requests, get_item_label
 
 __all__ = [
     "CONFIG_FILE",
@@ -30,6 +30,7 @@ __all__ = [
     "EXCEL_TEMPLATE",
     "JSON_TEMPLATE",
     "WORKSPACE_CLEANUP_FILES",
+    "build_execution_tasks",
     "detect_array_wrapper",
     "detect_url_id_candidates",
     "execute_bulk_requests",
@@ -37,6 +38,7 @@ __all__ = [
     "export_excel_template",
     "export_json_template",
     "format_template_str",
+    "get_item_label",
     "group_items_for_request",
     "load_data_file",
     "parse_curl",
