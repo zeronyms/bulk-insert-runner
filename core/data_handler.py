@@ -258,28 +258,56 @@ def load_csv_data(filepath: Path | str, sample_payload: Any = None) -> list[dict
         if isinstance(sample_item, dict):
             sample_flat = flatten_dict(sample_item)
 
-    with open(filepath, encoding="utf-8-sig", newline="") as f:
-        sample = f.read(4096)
-        f.seek(0)
+    path = Path(filepath)
+    # Support multiple encodings (UTF-8 with/without BOM, Latin-1/Windows-1252)
+    encodings_to_try = ["utf-8-sig", "latin-1"]
+    content: str | None = None
+    for enc in encodings_to_try:
         try:
-            dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
-            delimiter = dialect.delimiter
-        except Exception:
-            delimiter = ","
+            content = path.read_text(encoding=enc)
+            break
+        except UnicodeDecodeError:
+            continue
 
-        reader = csv.DictReader(f, delimiter=delimiter)
-        data_items: list[dict[str, Any]] = []
-        for row in reader:
-            if not row or all(v is None or str(v).strip() == "" for v in row.values()):
+    if content is None:
+        content = path.read_text(encoding="utf-8", errors="replace")
+
+    sample_chunk = content[:4096]
+    delimiter = ","
+    try:
+        dialect = csv.Sniffer().sniff(sample_chunk, delimiters=",;\t")
+        delimiter = dialect.delimiter
+    except Exception:
+        # Fallback delimiter detection based on first non-empty line
+        first_line = ""
+        for line in sample_chunk.splitlines():
+            if line.strip():
+                first_line = line
+                break
+        if first_line:
+            sc_count = first_line.count(";")
+            c_count = first_line.count(",")
+            t_count = first_line.count("\t")
+            if sc_count > c_count and sc_count > t_count:
+                delimiter = ";"
+            elif t_count > c_count and t_count > sc_count:
+                delimiter = "\t"
+
+    import io
+
+    reader = csv.DictReader(io.StringIO(content), delimiter=delimiter)
+    data_items: list[dict[str, Any]] = []
+    for row in reader:
+        if not row or all(v is None or str(v).strip() == "" for v in row.values()):
+            continue
+        flat_row: dict[str, Any] = {}
+        for k, v in row.items():
+            if k is None or not k.strip():
                 continue
-            flat_row: dict[str, Any] = {}
-            for k, v in row.items():
-                if k is None or not k.strip():
-                    continue
-                k_clean = k.strip()
-                tmpl_val = sample_flat.get(k_clean)
-                flat_row[k_clean] = cast_cell_value(v, tmpl_val)
-            data_items.append(unflatten_dict(flat_row))
+            k_clean = k.strip()
+            tmpl_val = sample_flat.get(k_clean)
+            flat_row[k_clean] = cast_cell_value(v, tmpl_val)
+        data_items.append(unflatten_dict(flat_row))
 
     return data_items
 

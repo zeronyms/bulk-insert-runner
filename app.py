@@ -21,19 +21,19 @@ import pandas as pd
 import requests
 import streamlit as st
 
+import core.runner
 from core.curl_parser import detect_array_wrapper, detect_url_id_candidates, parse_curl
 from core.data_handler import (
     cast_cell_value,
     flatten_dict,
-    format_template_str,
     load_csv_data,
     load_excel_data,
     unflatten_dict,
 )
-import core.runner
 
 if not hasattr(core.runner, "build_execution_tasks"):
     import importlib
+
     importlib.reload(core.runner)
 
 from core.runner import build_execution_tasks
@@ -53,17 +53,19 @@ st.set_page_config(
 
 STATE_DEFAULTS: dict[str, Any] = {
     "step": 1,
-    "config": None,        # dict: url, method, headers, mode, array_key, group_by
-    "data_rows": None,     # list[dict]: flattened rows for data editor
-    "run_results": None,   # list[dict]: per-request telemetry results
+    "config": None,  # dict: url, method, headers, mode, array_key, group_by
+    "data_rows": None,  # list[dict]: flattened rows for data editor
+    "run_results": None,  # list[dict]: per-request telemetry results
     "_upload_id": None,
     "_extension_import_done": False,
+    "editor_version": 0,
 }
 
 
 # ─────────────────────────────────────────────
 # State Management Helpers
 # ─────────────────────────────────────────────
+
 
 def init_session_state() -> None:
     """Ensure all expected session state variables are initialized."""
@@ -97,6 +99,7 @@ def get_unflattened_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # Theme & Static Assets
 # ─────────────────────────────────────────────
 
+
 @st.cache_data
 def load_stylesheet() -> str:
     """Load external CSS stylesheet from disk."""
@@ -115,6 +118,7 @@ def inject_custom_css() -> None:
 # ─────────────────────────────────────────────
 # Extension Query Parameter Importer
 # ─────────────────────────────────────────────
+
 
 def handle_extension_import() -> None:
     """Parse configuration passed from the browser extension via URL query param."""
@@ -146,6 +150,11 @@ def handle_extension_import() -> None:
         st.session_state.run_results = None
         st.session_state.step = 2
         st.session_state._extension_import_done = True
+        st.session_state._upload_id = None
+        st.session_state.editor_version = st.session_state.get("editor_version", 0) + 1
+        for k in list(st.session_state.keys()):
+            if k.startswith("data_editor_widget"):
+                del st.session_state[k]
 
         st.query_params.clear()
         st.toast("Konfigurasi dari Browser Extension berhasil dimuat.", icon="✓")
@@ -159,6 +168,7 @@ def handle_extension_import() -> None:
 # Layout Components (Masthead & Pipeline)
 # ─────────────────────────────────────────────
 
+
 def render_masthead() -> None:
     """Render the top application masthead."""
     st.markdown(
@@ -169,7 +179,10 @@ def render_masthead() -> None:
                     <span class="masthead-badge">v2.0</span>
                     <h1 class="masthead-title">Bulk Insert Runner</h1>
                 </div>
-                <p class="masthead-desc">Dispatcher payload batch untuk otomasi dan replikasi request API internal dari cURL.</p>
+                <p class="masthead-desc">
+                    Dispatcher payload batch untuk otomasi dan replikasi request
+                    API internal dari cURL.
+                </p>
             </div>
         </header>
         """,
@@ -219,6 +232,7 @@ def render_progress_pipeline() -> None:
 # STEP 1: Capture & Parse cURL
 # ─────────────────────────────────────────────
 
+
 def render_step1() -> None:
     """Step 1 view: cURL command input and validation."""
     st.markdown(
@@ -230,8 +244,14 @@ def render_step1() -> None:
             </div>
             <ol class="guide-steps">
                 <li>Buka aplikasi web target di browser dan buka DevTools (<kbd>F12</kbd>).</li>
-                <li>Lakukan 1 kali submit data sampel pada form web untuk menangkap request di tab <strong>Network</strong>.</li>
-                <li>Klik kanan pada request (POST / PUT), pilih <strong>Copy &rarr; Copy as cURL</strong>, lalu tempelkan di bawah.</li>
+                <li>
+                    Lakukan 1 kali submit data sampel pada form web untuk menangkap request di
+                    tab <strong>Network</strong>.
+                </li>
+                <li>
+                    Klik kanan pada request (POST / PUT), pilih
+                    <strong>Copy &rarr; Copy as cURL</strong>, lalu tempelkan di bawah.
+                </li>
             </ol>
         </div>
         """,
@@ -241,7 +261,10 @@ def render_step1() -> None:
     curl_input = st.text_area(
         "Script cURL",
         height=180,
-        placeholder="curl 'https://api.internal/v1/resource' -X POST -H 'Authorization: Bearer ...' --data-raw '{\"name\":\"sample\"}'",
+        placeholder=(
+            "curl 'https://api.internal/v1/resource' -X POST -H 'Authorization: Bearer ...' "
+            '--data-raw \'{"name":"sample"}\''
+        ),
         key="curl_input_text",
         label_visibility="collapsed",
     )
@@ -300,9 +323,7 @@ def process_curl_input(curl_cmd: str) -> None:
             data_template = [{default_var: cand_id, **row} for row in data_template]
 
     if not data_template:
-        data_template = (
-            sample_payload if isinstance(sample_payload, list) else [sample_payload]
-        )
+        data_template = sample_payload if isinstance(sample_payload, list) else [sample_payload]
 
     st.session_state.config = {
         "url": url,
@@ -315,6 +336,11 @@ def process_curl_input(curl_cmd: str) -> None:
     }
     st.session_state.data_rows = get_flattened_items(data_template)
     st.session_state.run_results = None
+    st.session_state._upload_id = None
+    st.session_state.editor_version = st.session_state.get("editor_version", 0) + 1
+    for k in list(st.session_state.keys()):
+        if k.startswith("data_editor_widget"):
+            del st.session_state[k]
     go_to_step(2)
     st.rerun()
 
@@ -323,6 +349,7 @@ def process_curl_input(curl_cmd: str) -> None:
 # STEP 2: Dataset & Parameter Mapping
 # ─────────────────────────────────────────────
 
+
 def render_step2() -> None:
     """Step 2 view: Target inspector, file ingestion, and interactive data table editor."""
     config: dict[str, Any] = st.session_state.config
@@ -330,9 +357,25 @@ def render_step2() -> None:
     mode = config.get("mode", "standard").title()
     group_by = config.get("group_by") or "None"
     url_target = config.get("url", "")
-    rows = st.session_state.data_rows or []
+
+    sample = config.get("sample_payload")
+    sample_items = sample if isinstance(sample, list) else ([sample] if sample else [])
+    sample_flat = get_flattened_items(sample_items) if sample_items else []
+    sample_cols = list(sample_flat[0].keys()) if sample_flat else []
+
+    if st.session_state.data_rows is None:
+        st.session_state.data_rows = list(sample_flat)
+
+    rows = st.session_state.data_rows
 
     method_class = f"method-{method.lower()}"
+
+    group_tag = (
+        f'<span class="meta-tag">Group by: <strong>{group_by}</strong></span>'
+        if group_by != "None"
+        else ""
+    )
+    header_count = len(config.get("headers", {}))
 
     st.markdown(
         f"""
@@ -343,7 +386,7 @@ def render_step2() -> None:
             </div>
             <div class="inspector-meta">
                 <span class="meta-tag">Mode: <strong>{mode}</strong></span>
-                {f'<span class="meta-tag">Group by: <strong>{group_by}</strong></span>' if group_by != "None" else ""}
+                {group_tag}
                 <span class="meta-tag">Terkonfigurasi: <strong>{len(rows)} baris</strong></span>
             </div>
         </div>
@@ -351,7 +394,7 @@ def render_step2() -> None:
         unsafe_allow_html=True,
     )
 
-    with st.expander(f"Header HTTP & URL Evaluasi ({len(config.get('headers', {}))} header)", expanded=False):
+    with st.expander(f"Header HTTP & URL Evaluasi ({header_count} header)", expanded=False):
         st.code(url_target, language=None)
         st.json(config.get("headers", {}))
 
@@ -369,6 +412,24 @@ def render_step2() -> None:
             """,
             unsafe_allow_html=True,
         )
+        c_clear, c_reset, _ = st.columns([1.2, 1.4, 2.4])
+        with c_clear:
+            if st.button("🗑️ Kosongkan Tabel", help="Hapus seluruh baris data pada tabel"):
+                st.session_state.data_rows = []
+                st.session_state.editor_version = st.session_state.get("editor_version", 0) + 1
+                for k in list(st.session_state.keys()):
+                    if k.startswith("data_editor_widget"):
+                        del st.session_state[k]
+                st.rerun()
+        with c_reset:
+            if st.button("↺ Reset ke Sampel", help="Kembalikan tabel ke data sampel cURL"):
+                st.session_state.data_rows = list(sample_flat)
+                st.session_state.editor_version = st.session_state.get("editor_version", 0) + 1
+                for k in list(st.session_state.keys()):
+                    if k.startswith("data_editor_widget"):
+                        del st.session_state[k]
+                st.rerun()
+
     with col_upload:
         uploaded_file = st.file_uploader(
             "Impor file CSV atau Excel",
@@ -376,23 +437,28 @@ def render_step2() -> None:
             key="data_upload",
             label_visibility="collapsed",
         )
-        if uploaded_file is not None and uploaded_file.file_id != st.session_state.get("_upload_id"):
+        if uploaded_file is None:
+            st.session_state._upload_id = None
+        elif uploaded_file.file_id != st.session_state.get("_upload_id"):
             st.session_state._upload_id = uploaded_file.file_id
             process_file_upload(uploaded_file, config)
 
     # Interactive Table Editor
-    df = pd.DataFrame(rows)
-    if df.empty and config.get("sample_payload"):
-        sample = config["sample_payload"]
-        sample_items = sample if isinstance(sample, list) else [sample]
-        df = pd.DataFrame(get_flattened_items(sample_items))
-    template_row = (rows or df.to_dict(orient="records") or [{}])[0]
+    if rows:
+        df = pd.DataFrame(rows)
+    elif sample_cols:
+        df = pd.DataFrame(columns=sample_cols)
+    else:
+        df = pd.DataFrame()
 
+    template_row = rows[0] if rows else (sample_flat[0] if sample_flat else {})
+
+    editor_key = f"data_editor_widget_{st.session_state.get('editor_version', 0)}"
     edited_df = st.data_editor(
         df,
         num_rows="dynamic",
         use_container_width=True,
-        key="data_editor_widget",
+        key=editor_key,
     )
 
     st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
@@ -423,10 +489,16 @@ def process_file_upload(uploaded_file: Any, config: dict[str, Any]) -> None:
         sample = config.get("sample_payload")
         fname: str = uploaded_file.name
         if fname.endswith(".xlsx"):
+            uploaded_file.seek(0)
             file_bytes = uploaded_file.read()
             items = load_excel_data(io.BytesIO(file_bytes), sample)  # type: ignore[arg-type]
         else:
-            text = uploaded_file.read().decode("utf-8-sig")
+            uploaded_file.seek(0)
+            raw_bytes = uploaded_file.read()
+            try:
+                text = raw_bytes.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                text = raw_bytes.decode("latin-1")
             with tempfile.NamedTemporaryFile(
                 mode="w", suffix=".csv", delete=False, encoding="utf-8-sig"
             ) as tmp:
@@ -440,6 +512,10 @@ def process_file_upload(uploaded_file: Any, config: dict[str, Any]) -> None:
 
         if items:
             st.session_state.data_rows = get_flattened_items(items)
+            st.session_state.editor_version = st.session_state.get("editor_version", 0) + 1
+            for k in list(st.session_state.keys()):
+                if k.startswith("data_editor_widget"):
+                    del st.session_state[k]
             st.success(f"Berhasil memuat {len(items)} baris data dari '{fname}'.")
             st.rerun()
         else:
@@ -451,6 +527,7 @@ def process_file_upload(uploaded_file: Any, config: dict[str, Any]) -> None:
 # ─────────────────────────────────────────────
 # STEP 3: Preview, Dispatch & Telemetry
 # ─────────────────────────────────────────────
+
 
 def render_step3() -> None:
     """Step 3 view: Payload inspection, parameter tuning, live telemetry stream, and results."""
@@ -474,6 +551,8 @@ def render_step3() -> None:
     )
     total_requests = len(tasks)
 
+    batch_sub = f"Array batch ({array_key})" if array_key else "Single item per request"
+
     # Spec metrics grid
     st.markdown(
         f"""
@@ -491,7 +570,7 @@ def render_step3() -> None:
             <div class="spec-card">
                 <div class="spec-label">Strategi Payload</div>
                 <div class="spec-value" style="font-size: 1.15rem;">{mode.title()}</div>
-                <div class="spec-sub">{"Array batch (" + str(array_key) + ")" if array_key else "Single item per request"}</div>
+                <div class="spec-sub">{batch_sub}</div>
             </div>
         </div>
         """,
@@ -501,7 +580,9 @@ def render_step3() -> None:
     with st.expander("Inspeksi Payload Request Pertama", expanded=True):
         if tasks:
             preview_url, _, preview_payload, preview_label = tasks[0]
-            st.markdown(f"**Target URL**: `{preview_url}` &nbsp;&middot;&nbsp; **Label**: `{preview_label}`")
+            st.markdown(
+                f"**Target URL**: `{preview_url}` &nbsp;&middot;&nbsp; **Label**: `{preview_label}`"
+            )
             st.json(preview_payload)
 
     # Execution Parameters Box
@@ -523,7 +604,10 @@ def render_step3() -> None:
             max_value=60.0,
             value=2.0,
             step=0.5,
-            help="Atur jeda untuk mencegah rate limit (429 Too Many Requests) atau beban berlebih pada server.",
+            help=(
+                "Atur jeda untuk mencegah rate limit (429 Too Many Requests) "
+                "atau beban berlebih pada server."
+            ),
         )
     with col_timeout:
         timeout = st.number_input(
@@ -565,7 +649,8 @@ def execute_requests_stream(
 
     st.markdown(
         """
-        <div style="margin-top: 20px; margin-bottom: 8px; font-weight: 600; font-size: 0.95rem; color: #f0f3f6;">
+        <div style="margin-top: 20px; margin-bottom: 8px; font-weight: 600;
+                    font-size: 0.95rem; color: #f0f3f6;">
             Log Telemetri Request
         </div>
         """,
@@ -666,7 +751,8 @@ def render_execution_summary(results: list[dict[str, Any]]) -> None:
 
     st.markdown(
         f"""
-        <div style="margin-top: 24px; margin-bottom: 10px; font-weight: 600; font-size: 0.95rem; color: #f0f3f6;">
+        <div style="margin-top: 24px; margin-bottom: 10px; font-weight: 600;
+                    font-size: 0.95rem; color: #f0f3f6;">
             Hasil Eksekusi
         </div>
         <div class="spec-grid">
@@ -705,6 +791,7 @@ def render_execution_summary(results: list[dict[str, Any]]) -> None:
 # Sidebar Component
 # ─────────────────────────────────────────────
 
+
 def render_sidebar() -> None:
     """Render the application sidebar with session status and quick workflow guide."""
     with st.sidebar:
@@ -726,11 +813,16 @@ def render_sidebar() -> None:
             st.markdown(
                 f"""
                 <div class="sidebar-status-box">
-                    <div style="font-size: 0.72rem; color: #8b949e; margin-bottom: 6px;">Status Sesi</div>
-                    <div style="display: flex; align-items: center; font-size: 0.84rem; font-weight: 500; color: #34d399; margin-bottom: 6px;">
+                    <div style="font-size: 0.72rem; color: #8b949e; margin-bottom: 6px;">
+                        Status Sesi
+                    </div>
+                    <div style="display: flex; align-items: center; font-size: 0.84rem;
+                                font-weight: 500; color: #34d399; margin-bottom: 6px;">
                         <span class="status-dot-active"></span> Config Siap
                     </div>
-                    <div style="font-size: 0.75rem; color: #cbd5e1; font-family: ui-monospace, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    <div style="font-size: 0.75rem; color: #cbd5e1;
+                                font-family: ui-monospace, monospace; overflow: hidden;
+                                text-overflow: ellipsis; white-space: nowrap;">
                         {method} {url_preview[:28]}...
                     </div>
                     <div style="font-size: 0.75rem; color: #8b949e; margin-top: 4px;">
@@ -747,8 +839,11 @@ def render_sidebar() -> None:
             st.markdown(
                 """
                 <div class="sidebar-status-box">
-                    <div style="font-size: 0.72rem; color: #8b949e; margin-bottom: 6px;">Status Sesi</div>
-                    <div style="display: flex; align-items: center; font-size: 0.84rem; color: #8b949e;">
+                    <div style="font-size: 0.72rem; color: #8b949e; margin-bottom: 6px;">
+                        Status Sesi
+                    </div>
+                    <div style="display: flex; align-items: center;
+                                font-size: 0.84rem; color: #8b949e;">
                         <span class="status-dot-idle"></span> Menunggu cURL
                     </div>
                 </div>
@@ -763,11 +858,11 @@ def render_sidebar() -> None:
                 - Buka browser &rarr; tekan <kbd>F12</kbd> &rarr; tab **Network**.
                 - Submit 1 sample data pada form web target.
                 - Klik kanan request &rarr; **Copy as cURL**.
-                
+
                 **2. Ekstrak & Mapping Data**
                 - Tempel cURL di Step 1.
                 - Sesuaikan nilai tabel atau unggah file Excel/CSV di Step 2.
-                
+
                 **3. Eksekusi Berjeda**
                 - Tetapkan jeda antar request (misal 2 detik) untuk menjaga reliabilitas server.
                 """,
@@ -778,6 +873,7 @@ def render_sidebar() -> None:
 # ─────────────────────────────────────────────
 # Main Application Entrypoint
 # ─────────────────────────────────────────────
+
 
 def main() -> None:
     """Main application orchestrator."""
