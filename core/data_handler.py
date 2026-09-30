@@ -246,8 +246,8 @@ def load_excel_data(filepath: Path | str, sample_payload: Any = None) -> list[di
     return data_items
 
 
-def load_csv_data(filepath: Path | str, sample_payload: Any = None) -> list[dict[str, Any]]:
-    """Load and parse data rows from a CSV file (auto-detecting delimiter)."""
+def parse_csv_string(content: str, sample_payload: Any = None) -> list[dict[str, Any]]:
+    """Parse CSV text content into records (auto-detecting delimiter)."""
     sample_flat: dict[str, Any] = {}
     if sample_payload:
         sample_item = (
@@ -257,20 +257,6 @@ def load_csv_data(filepath: Path | str, sample_payload: Any = None) -> list[dict
         )
         if isinstance(sample_item, dict):
             sample_flat = flatten_dict(sample_item)
-
-    path = Path(filepath)
-    # Support multiple encodings (UTF-8 with/without BOM, Latin-1/Windows-1252)
-    encodings_to_try = ["utf-8-sig", "latin-1"]
-    content: str | None = None
-    for enc in encodings_to_try:
-        try:
-            content = path.read_text(encoding=enc)
-            break
-        except UnicodeDecodeError:
-            continue
-
-    if content is None:
-        content = path.read_text(encoding="utf-8", errors="replace")
 
     sample_chunk = content[:4096]
     delimiter = ","
@@ -310,6 +296,48 @@ def load_csv_data(filepath: Path | str, sample_payload: Any = None) -> list[dict
         data_items.append(unflatten_dict(flat_row))
 
     return data_items
+
+
+def load_csv_data(filepath: Path | str, sample_payload: Any = None) -> list[dict[str, Any]]:
+    """Load and parse data rows from a CSV file (auto-detecting delimiter)."""
+    path = Path(filepath)
+    # Support multiple encodings (UTF-8 with/without BOM, Latin-1/Windows-1252)
+    encodings_to_try = ["utf-8-sig", "latin-1"]
+    content: str | None = None
+    for enc in encodings_to_try:
+        try:
+            content = path.read_text(encoding=enc)
+            break
+        except UnicodeDecodeError:
+            continue
+
+    if content is None:
+        content = path.read_text(encoding="utf-8", errors="replace")
+
+    return parse_csv_string(content, sample_payload)
+
+
+def parse_uploaded_file(
+    file_obj: Any,
+    filename: str,
+    sample_payload: Any = None,
+) -> list[dict[str, Any]]:
+    """Parse in-memory uploaded file (CSV or Excel) without writing to disk."""
+    import io
+
+    file_obj.seek(0)
+    raw_bytes = file_obj.read()
+    if filename.lower().endswith(".xlsx"):
+        return load_excel_data(io.BytesIO(raw_bytes), sample_payload)  # type: ignore[arg-type]
+
+    # Handle CSV decoding
+    try:
+        text = raw_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = raw_bytes.decode("latin-1", errors="replace")
+
+    return parse_csv_string(text, sample_payload)
+
 
 
 def load_json_data(filepath: Path | str) -> list[dict[str, Any]]:
