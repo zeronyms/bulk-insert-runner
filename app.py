@@ -414,7 +414,7 @@ def render_step2() -> None:
         )
         c_clear, c_reset, _ = st.columns([1.2, 1.4, 2.4])
         with c_clear:
-            if st.button("🗑️ Kosongkan Tabel", help="Hapus seluruh baris data pada tabel"):
+            if st.button("Kosongkan Tabel", help="Hapus seluruh baris data pada tabel"):
                 st.session_state.data_rows = []
                 st.session_state.editor_version = st.session_state.get("editor_version", 0) + 1
                 for k in list(st.session_state.keys()):
@@ -422,7 +422,7 @@ def render_step2() -> None:
                         del st.session_state[k]
                 st.rerun()
         with c_reset:
-            if st.button("↺ Reset ke Sampel", help="Kembalikan tabel ke data sampel cURL"):
+            if st.button("Reset ke Sampel", help="Kembalikan tabel ke data sampel cURL"):
                 st.session_state.data_rows = list(sample_flat)
                 st.session_state.editor_version = st.session_state.get("editor_version", 0) + 1
                 for k in list(st.session_state.keys()):
