@@ -48,7 +48,12 @@ def render_step1() -> None:
 
     col_btn, _ = st.columns([2, 5])
     with col_btn:
-        if st.button("Ekstrak & Validasi cURL", type="primary", disabled=not curl_input.strip()):
+        if st.button(
+            "Ekstrak & Validasi cURL",
+            type="primary",
+            disabled=not curl_input.strip(),
+            use_container_width=True,
+        ):
             process_curl_input(curl_input.strip())
 
 

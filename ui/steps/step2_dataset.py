@@ -118,11 +118,11 @@ def render_step2() -> None:
     st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
     col_back, _, col_next = st.columns([2, 3, 2])
     with col_back:
-        if st.button("← Kembali ke Input cURL"):
+        if st.button("← Kembali ke Input cURL", use_container_width=True):
             go_to_step(1)
             st.rerun()
     with col_next:
-        if st.button("Lanjut ke Preview Eksekusi →", type="primary"):
+        if st.button("Lanjut ke Preview Eksekusi →", type="primary", use_container_width=True):
             cleaned = edited_df.dropna(how="all")
             cleaned = cleaned.astype(object).where(cleaned.notna(), None)
             rows_out = [

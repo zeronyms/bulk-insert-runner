@@ -21,7 +21,6 @@ from ui.steps import render_step1, render_step2, render_step3
 
 st.set_page_config(
     page_title="Bulk Insert Runner",
-    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded",
 )

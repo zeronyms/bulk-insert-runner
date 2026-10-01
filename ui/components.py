@@ -9,6 +9,7 @@ import streamlit as st
 from ui.state import reset_session
 
 CSS_FILE = Path(__file__).resolve().parent.parent / "static" / "style.css"
+JS_FILE = Path(__file__).resolve().parent.parent / "static" / "spatial_glass.js"
 
 
 @st.cache_data
@@ -19,11 +20,37 @@ def load_stylesheet() -> str:
     return ""
 
 
+@st.cache_data
+def load_spatial_script() -> str:
+    """Load spatial refractive optics script from disk."""
+    if JS_FILE.exists():
+        return JS_FILE.read_text(encoding="utf-8")
+    return ""
+
+
 def inject_custom_css() -> None:
-    """Inject custom stylesheet into the Streamlit app."""
+    """Inject custom stylesheet and spatial interaction optics into the Streamlit app."""
     css = load_stylesheet()
+    js = load_spatial_script()
     if css:
         st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+    if js:
+        st.components.v1.html(
+            f"""
+            <script>
+            (function() {{
+                const targetDoc = window.parent.document;
+                if (!targetDoc || targetDoc.getElementById('spatial-glass-runtime')) return;
+                const scriptEl = targetDoc.createElement('script');
+                scriptEl.id = 'spatial-glass-runtime';
+                scriptEl.textContent = {repr(js)};
+                targetDoc.head.appendChild(scriptEl);
+            }})();
+            </script>
+            """,
+            height=0,
+            width=0,
+        )
 
 
 def render_masthead() -> None:

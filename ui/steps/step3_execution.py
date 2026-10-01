@@ -107,13 +107,14 @@ def render_step3() -> None:
     st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
     col_back, _, col_run = st.columns([2, 3, 2])
     with col_back:
-        if st.button("← Kembali ke Edit Data"):
+        if st.button("← Kembali ke Edit Data", use_container_width=True):
             go_to_step(2)
             st.rerun()
     with col_run:
         run_clicked = st.button(
             f"Mulai Eksekusi ({total_requests} Request)",
             type="primary",
+            use_container_width=True,
         )
 
     if run_clicked:
