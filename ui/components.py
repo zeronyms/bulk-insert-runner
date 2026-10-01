@@ -94,17 +94,17 @@ def render_progress_pipeline() -> None:
         <div class="pipeline-bar">
             <div class="pipeline-step {s1_state}">
                 <span class="pipeline-chip">{s1_badge}</span>
-                <span>1. Input cURL</span>
+                <span>Input cURL</span>
             </div>
             <div class="pipeline-divider"></div>
             <div class="pipeline-step {s2_state}">
                 <span class="pipeline-chip">{s2_badge}</span>
-                <span>2. Data & Parameter</span>
+                <span>Data & Parameter</span>
             </div>
             <div class="pipeline-divider"></div>
             <div class="pipeline-step {s3_state}">
                 <span class="pipeline-chip">{s3_badge}</span>
-                <span>3. Eksekusi & Monitoring</span>
+                <span>Eksekusi & Monitoring</span>
             </div>
         </div>
         """,
